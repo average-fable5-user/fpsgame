@@ -1,0 +1,15 @@
+# local tooling
+.claude/
+.wrangler/
+.vercel/
+node_modules/
+*.log
+
+# archives / unused assets (fpstest.rar is >100 MB, over GitHub's file limit)
+*.rar
+*.zip
+sniper.glb
+
+# OS junk
+Thumbs.db
+.DS_Store

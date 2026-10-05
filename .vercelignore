@@ -1,0 +1,7 @@
+# only the static game is deployed to Vercel; the relay goes to Cloudflare (see README)
+server/
+viewer.html
+start.bat
+README.md
+*.rar
+sniper.glb

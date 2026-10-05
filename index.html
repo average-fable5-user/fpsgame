@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FPS, the kinda weird way.</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"}}</script>
+</head>
+<body>
+
+<!-- ================= IN-GAME HUD ================= -->
+<div id="hud" class="hidden">
+  <canvas id="xh" width="96" height="96"></canvas>
+  <div id="reddot"></div>
+  <div id="hitmarker"><i></i><i></i></div>
+  <div id="vignette"></div>
+  <div id="dmgdir"></div>
+
+  <div id="topleft"><canvas id="minimap" width="170" height="170"></canvas><div id="mmring"></div></div>
+  <div id="modebar"></div>
+  <canvas id="compass" width="420" height="34"></canvas>
+  <div id="killfeed"></div>
+  <div id="popups"></div>
+  <div id="prompt"></div>
+  <div id="respawn" class="hidden"></div>
+  <div id="flighthud" class="hidden">
+    <div id="fh-reticle"></div>
+    <div id="fh-aim"></div>
+    <div class="fh-left"><span>SPD</span><b id="fh-spd">0</b><small>KM/H</small></div>
+    <div class="fh-right"><span>ALT</span><b id="fh-alt">0</b><small>M</small></div>
+    <div class="fh-thr"><i id="fh-thr"></i><span>THR</span></div>
+    <div class="fh-info"><span id="fh-kind">JET</span><span id="fh-bomb">BOMB READY</span><span id="fh-ab" class="hidden">AFTERBURNER</span><span id="fh-stall" class="hidden warn">STALL</span></div>
+    <div class="fh-keys">MOUSE AIM — THE AIRCRAFT FOLLOWS · W/S THROTTLE · A/D TURN · SHIFT BOOST · LMB CANNON (B-2: CARPET BOMB) · RMB BOMB · F EJECT</div>
+  </div>
+  <div id="tankhud" class="hidden">
+    <div id="th-reticle"></div>
+    <div class="th-panel"><div><span>SPEED</span><b id="th-spd">0</b><small>KM/H</small></div><div><span>MAIN GUN</span><b id="th-state">READY</b><i class="th-bar"><i id="th-rel"></i></i></div></div>
+    <div class="fh-keys">W/S DRIVE · A/D STEER · SHIFT FAST · MOUSE TURRET · LMB FIRE · RMB ZOOM · F EXIT</div>
+  </div>
+  <div id="lockhint" class="hidden">MOUSE NOT CAPTURED — CLICK THE GAME TO LOCK THE CURSOR</div>
+
+  <div id="bottomleft">
+    <div id="hpwrap"><div class="plus">+</div><div><div id="hpbar"><div id="hpfill"></div></div><div id="hpmeta"><span id="hptext">100</span><span id="stance">STANDING</span></div></div></div>
+  </div>
+  <div id="bottomright">
+    <div id="wrow"><div id="wicon"></div><div id="wmeta"><div id="wname">AK-74</div><div id="wmode">AUTO</div></div><div id="ammo"><span id="mag">30</span><span id="reserve">150</span></div></div>
+    <div id="wslots"><span class="slot sel">1 AK-74</span><span class="slot">2 DESERT EAGLE</span></div>
+  </div>
+  <div id="banner"></div>
+  <div id="scoreboard" class="hidden"></div>
+</div>
+
+<!-- ================= LOBBY ================= -->
+<div id="lobby">
+  <div class="topbar">
+    <div class="logo">FPS<span>the kinda weird way.</span></div>
+    <div class="pcard"><div class="emblem" id="emblem">1</div><div class="pinfo"><div class="pname"><span id="pname">OPERATOR</span> <small id="rankname">RECRUIT</small></div><div class="xpbar"><i id="xpfill"></i></div><div class="xptext" id="xptext">0 / 1000 XP</div></div></div>
+  </div>
+  <nav id="tabs">
+    <button data-tab="play" class="sel">PLAY</button>
+    <button data-tab="mp">MULTIPLAYER</button>
+    <button data-tab="loadout">LOADOUT</button>
+    <button data-tab="xh">CROSSHAIR</button>
+    <button data-tab="career">CAREER</button>
+    <button data-tab="settings">SETTINGS</button>
+  </nav>
+  <main>
+    <section id="tab-play" class="tab sel">
+      <h2>SELECT MODE <small>· FOREST SECTOR 7</small></h2>
+      <div class="cards modes">
+        <div class="card modecard" data-m="survival"><div class="tag">SOLO</div><h3>SURVIVAL</h3><p>Hold the forest alone against endless waves. No respawns.</p></div>
+        <div class="card modecard" data-m="tdm"><div class="tag">6 v 6</div><h3>TEAM DEATHMATCH</h3><p>Your squad against theirs. First to 40 kills.</p></div>
+        <div class="card modecard" data-m="ctf"><div class="tag">5 v 5</div><h3>CAPTURE THE FLAG</h3><p>Steal their flag, bring it home. First to 3 captures.</p></div>
+        <div class="card modecard" data-m="dom"><div class="tag">6 v 6</div><h3>DOMINATION</h3><p>Capture and hold A, B and C. First to 200.</p></div>
+      </div>
+      <h2 class="mt">ENEMY DIFFICULTY</h2>
+      <div class="cards small">
+        <div class="card diffcard" data-d="easy"><div class="tag">RECRUIT</div><h3>EASY</h3><div class="pips"><i class="on"></i><i></i><i></i></div></div>
+        <div class="card diffcard" data-d="medium"><div class="tag">REGULAR</div><h3>MEDIUM</h3><div class="pips"><i class="on"></i><i class="on"></i><i></i></div></div>
+        <div class="card diffcard" data-d="hard"><div class="tag">VETERAN</div><h3>HARD</h3><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+      </div>
+      <div class="deployrow"><button id="deploy" class="big" disabled>DEPLOY</button><div id="loadwrap"><div id="loadbar"><i id="loadfill"></i></div><div id="assetnote">loading assets…</div></div></div>
+    </section>
+
+    <section id="tab-mp" class="tab">
+      <h2>MULTIPLAYER <small>· WEBSOCKET SERVER (CLOUDFLARE WORKER)</small></h2>
+      <div class="settings">
+        <label><span>SERVER URL</span><input type="text" id="n-server" placeholder="wss://your-worker.workers.dev"><b></b></label>
+        <label><span>ROOM CODE</span><input type="text" id="n-room" placeholder="alpha"><b></b></label>
+        <label><span>MODE</span><select id="n-mode"><option value="tdm">TEAM DEATHMATCH</option><option value="ffa">FREE FOR ALL</option></select><b></b></label>
+      </div>
+      <div class="deployrow"><button id="netconnect" class="small">CONNECT</button><button id="netdeploy" class="big" disabled>DEPLOY</button><div id="netstatus" class="note">NOT CONNECTED</div></div>
+      <p class="note">Deploy <b>worker.js</b> with wrangler (see wrangler.toml), paste the worker URL above, share the room code. Your callsign is set under SETTINGS.</p>
+    </section>
+
+    <section id="tab-loadout" class="tab">
+      <h2>PRIMARY</h2>
+      <div class="cards">
+        <div class="card wcard primary" data-w="ak"><div class="tag">ASSAULT RIFLE</div><h3>AK-74</h3><p>5.45 · full auto · 30 rnd</p><div class="stat"><span>DAMAGE</span><i style="--v:55%"></i></div><div class="stat"><span>FIRE RATE</span><i style="--v:80%"></i></div><div class="stat"><span>ACCURACY</span><i style="--v:55%"></i></div><div class="stat"><span>MOBILITY</span><i style="--v:60%"></i></div></div>
+        <div class="card wcard primary" data-w="sniper"><div class="tag">SNIPER</div><h3>AWM</h3><p>.338 · bolt action · 5 rnd · scope</p><div class="stat"><span>DAMAGE</span><i style="--v:100%"></i></div><div class="stat"><span>FIRE RATE</span><i style="--v:15%"></i></div><div class="stat"><span>ACCURACY</span><i style="--v:100%"></i></div><div class="stat"><span>MOBILITY</span><i style="--v:30%"></i></div></div>
+        <div class="card wcard primary" data-w="ar"><div class="tag">ASSAULT RIFLE</div><h3>AR-15</h3><p>5.56 · full auto · 30 rnd · red dot</p><div class="stat"><span>DAMAGE</span><i style="--v:45%"></i></div><div class="stat"><span>FIRE RATE</span><i style="--v:85%"></i></div><div class="stat"><span>ACCURACY</span><i style="--v:65%"></i></div><div class="stat"><span>MOBILITY</span><i style="--v:60%"></i></div></div>
+      </div>
+      <h2 class="mt">SECONDARY</h2>
+      <div class="cards">
+        <div class="card wcard secondary" data-w="pistol"><div class="tag">HANDGUN</div><h3>DESERT EAGLE</h3><p>.50 AE · semi auto · 7 rnd</p><div class="stat"><span>DAMAGE</span><i style="--v:75%"></i></div><div class="stat"><span>FIRE RATE</span><i style="--v:35%"></i></div><div class="stat"><span>ACCURACY</span><i style="--v:70%"></i></div><div class="stat"><span>MOBILITY</span><i style="--v:90%"></i></div></div>
+        <div class="card wcard secondary" data-w="glock"><div class="tag">HANDGUN</div><h3>GLOCK 17</h3><p>9mm · semi auto · 17 rnd</p><div class="stat"><span>DAMAGE</span><i style="--v:45%"></i></div><div class="stat"><span>FIRE RATE</span><i style="--v:55%"></i></div><div class="stat"><span>ACCURACY</span><i style="--v:75%"></i></div><div class="stat"><span>MOBILITY</span><i style="--v:95%"></i></div></div>
+      </div>
+    </section>
+
+    <section id="tab-xh" class="tab">
+      <h2>CROSSHAIR</h2>
+      <div class="xhwrap">
+        <canvas id="xhprev" width="200" height="120"></canvas>
+        <div class="settings">
+          <label><span>STYLE</span><select id="x-style"><option value="cross">CROSS</option><option value="dot">DOT</option><option value="circle">CIRCLE</option><option value="t">T-SHAPE</option><option value="chevron">CHEVRON</option><option value="brackets">BRACKETS</option><option value="none">NONE</option></select><b></b></label>
+          <label><span>COLOR</span><select id="x-color"><option value="#ffffff">WHITE</option><option value="#4fc3ff">CYAN</option><option value="#7cff5a">GREEN</option><option value="#ffe35a">YELLOW</option><option value="#ff5a3a">RED</option><option value="#ff5ad6">MAGENTA</option></select><b></b></label>
+          <label><span>SIZE</span><input type="range" id="x-size" min="0.4" max="2.5" step="0.1"><b></b></label>
+          <label><span>GAP</span><input type="range" id="x-gap" min="0.2" max="3" step="0.1"><b></b></label>
+          <label><span>CENTER DOT</span><input type="checkbox" id="x-dot"><b></b></label>
+          <label><span>OUTLINE</span><input type="checkbox" id="x-outline"><b></b></label>
+          <label><span>DYNAMIC SPREAD</span><input type="checkbox" id="x-dynamic"><b></b></label>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-career" class="tab">
+      <h2>CAREER</h2>
+      <div class="statgrid"><div><b id="c-kills">0</b><span>KILLS</span></div><div><b id="c-hs">0</b><span>HEADSHOTS</span></div><div><b id="c-wins">0</b><span>WINS</span></div><div><b id="c-matches">0</b><span>DEPLOYMENTS</span></div><div><b id="c-wave">0</b><span>BEST WAVE</span></div><div><b id="c-xp">0</b><span>TOTAL XP</span></div></div>
+      <button id="wipe" class="small">RESET CAREER</button>
+    </section>
+
+    <section id="tab-settings" class="tab">
+      <h2>SETTINGS</h2>
+      <div class="settings">
+        <label><span>CALLSIGN</span><input type="text" id="s-name" maxlength="14"><b></b></label>
+        <label><span>MOUSE SENSITIVITY</span><input type="range" id="s-sens" min="0.2" max="3" step="0.1"><b></b></label>
+        <label><span>FIELD OF VIEW</span><input type="range" id="s-fov" min="60" max="100" step="1"><b></b></label>
+        <label><span>MASTER VOLUME</span><input type="range" id="s-vol" min="0" max="1" step="0.05"><b></b></label>
+        <label><span>CROUCH</span><select id="s-crouch"><option value="toggle">TOGGLE (C)</option><option value="hold">HOLD (C / CTRL)</option></select><b></b></label>
+        <label><span>SHADOWS</span><select id="s-shadow"><option value="high">HIGH</option><option value="low">LOW</option><option value="off">OFF</option></select><b></b></label>
+      </div>
+    </section>
+  </main>
+  <div class="bottombar">WASD move · SHIFT sprint · C crouch · SPACE jump · LMB fire · RMB aim · R reload · 1 / 2 / wheel switch · F tanks / jets / B-2 (team modes) · TAB scoreboard · ESC pause</div>
+</div>
+
+<!-- ================= OVERLAYS ================= -->
+<div id="pause" class="overlay hidden"><div class="menu"><h2>PAUSED</h2><button id="resume">RESUME</button><button id="tolobby">RETURN TO LOBBY</button></div></div>
+<div id="death" class="overlay hidden"><div class="menu wide"><h2 class="lose">KILLED IN ACTION</h2><div class="statgrid small" id="deathstats"></div><div class="xpgain" id="xpgain"></div><button id="restart">REDEPLOY</button><button id="tolobby2">RETURN TO LOBBY</button></div></div>
+<div id="end" class="overlay hidden"><div class="menu wide"><h2 id="endtitle">VICTORY</h2><div class="statgrid small" id="endstats"></div><div class="xpgain" id="endxp"></div><button id="rematch">PLAY AGAIN</button><button id="tolobby3">RETURN TO LOBBY</button></div></div>
+
+<script src="config.js"></script>
+<script type="module" src="game.js"></script>
+</body>
+</html>

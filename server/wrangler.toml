@@ -1,0 +1,13 @@
+name = "small-hat-0990"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Durable Object that holds one match room per room code.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed DO classes work on the free plan too (plain "new_classes" needs a paid plan).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>model viewer</title>
+<style>body{margin:0;background:#223;color:#eee;font:12px monospace}#info{position:fixed;left:8px;top:8px;white-space:pre;background:rgba(0,0,0,.5);padding:6px;max-height:95vh;overflow:auto}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"}}</script>
+</head><body><div id="info">loading…</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const q = new URLSearchParams(location.search), file = q.get('m') || 'tank_t-55a.glb';
+const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(innerWidth, innerHeight); renderer.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x334455);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.5)); const dl = new THREE.DirectionalLight(0xffffff, 2); dl.position.set(3, 6, 4); scene.add(dl);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 5000); const ctl = new OrbitControls(camera, renderer.domElement);
+let mixer = null, clip = null, root = null, time = 0, playing = false;
+const info = document.getElementById('info'); const log = s => info.textContent += s + '\n';
+new GLTFLoader().load(file, g => {
+  root = g.scene; scene.add(root); info.textContent = file + '\n';
+  const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  log('bounds min ' + box.min.toArray().map(v => v.toFixed(2)) + ' max ' + box.max.toArray().map(v => v.toFixed(2)) + ' size ' + size.toArray().map(v => v.toFixed(2)));
+  scene.add(new THREE.AxesHelper(size.length() * 0.6)); scene.add(new THREE.GridHelper(size.length() * 2, 20, 0x888888, 0x555555));
+  root.traverse(o => { if (o.isMesh) { o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox; log(`mesh ${o.name} mat=${o.material.name} skinned=${!!o.isSkinnedMesh} v=${o.geometry.attributes.position.count} bb=${b.min.toArray().map(v=>v.toFixed(1))}..${b.max.toArray().map(v=>v.toFixed(1))}`); } });
+  if (g.animations.length) { clip = g.animations[0]; mixer = new THREE.AnimationMixer(root); const a = mixer.clipAction(clip); a.play(); window.__act = a; log('clip ' + clip.name + ' dur ' + clip.duration.toFixed(2)); }
+  camera.position.copy(c).add(new THREE.Vector3(size.length() * 0.6, size.length() * 0.4, size.length() * 0.6)); ctl.target.copy(c); ctl.update();
+  window.V = { scene, camera, ctl, root, THREE, renderer, mixer, setTime(t) { if (!mixer) return; __act.time = t; mixer.update(0); renderer.render(scene, camera); }, play(v) { playing = v; }, look(pos, tgt) { camera.position.set(...pos); ctl.target.set(...tgt); ctl.update(); renderer.render(scene, camera); }, render() { renderer.render(scene, camera); },
+    async shot(name, pos, tgt, t = 0) { if (pos) { camera.position.set(...pos); ctl.target.set(...tgt); ctl.update(); } if (mixer) { __act.time = t; mixer.update(0); } renderer.render(scene, camera); const d = renderer.domElement.toDataURL('image/jpeg', 0.7); await fetch('http://localhost:8124/shot', { method: 'POST', body: name + '|' + d }); return name; },
+    box, size, log };
+  log('ready');
+}, undefined, e => log('ERR ' + e.message));
+const clock = new THREE.Clock();
+(function loop() { requestAnimationFrame(loop); const dt = clock.getDelta(); if (mixer && playing) mixer.update(dt); else if (mixer) mixer.update(0); renderer.render(scene, camera); })();
+</script></body></html>
