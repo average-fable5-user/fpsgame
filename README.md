@@ -37,6 +37,21 @@ python -m http.server 8123
 
 Then open <http://localhost:8123>. On Windows you can double-click `start.bat` instead.
 
+## Desktop build (single .exe)
+
+```bash
+pip install pywebview pyinstaller pillow
+python desktop/build.py
+```
+
+This produces `dist/FPS-kinda-weird.exe`, one file of about 150 MB with all models included. Send it to anyone on Windows 10/11.
+- **How it works:** the exe runs a tiny local web server and shows the game in a native window (Edge WebView2, preinstalled on Windows 10/11).
+- **Offline:** single-player works without internet; multiplayer still uses the relay in `config.js`.
+- **Saves:** settings and career are stored in `%LOCALAPPDATA%\FPSKindaWeird`.
+- **Troubleshooting:** set `FPS_LOG=C:\path\log.txt` before starting it to log every file request and the game's asset status.
+
+The exe is too large for a normal git commit (GitHub's limit is 100 MB per file), so share it directly or attach it to a GitHub Release, which allows 2 GB per file.
+
 ## Deploy
 
 The project has two parts:
@@ -79,4 +94,5 @@ game.js           gameplay: weapons, AI, modes, vehicles, HUD, multiplayer clien
 vendor/three/     Three.js r158 (self-hosted, so the game also runs offline)
 server/           Cloudflare Worker relay (worker.js, wrangler.toml)
 viewer.html       dev tool: inspect a .glb and its animation (not deployed)
+desktop/          pywebview launcher + PyInstaller build script for the .exe
 ```

@@ -13,3 +13,8 @@ sniper.glb
 # OS junk
 Thumbs.db
 .DS_Store
+
+# desktop build output
+build/
+dist/
+*.spec

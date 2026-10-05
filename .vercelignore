@@ -5,3 +5,5 @@ start.bat
 README.md
 *.rar
 sniper.glb
+desktop/
+vendor/three/examples/jsm/controls/
