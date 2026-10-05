@@ -1,6 +1,6 @@
 # FPS, the kinda weird way.
 
-A browser FPS built on [Three.js](https://threejs.org/): a war-torn forest, AI soldiers, drivable T-55 tanks, flyable jets and a B-2 bomber, four game modes and WebSocket multiplayer. Plain HTML/CSS/JS with ES modules from a CDN, no build step.
+A browser FPS built on [Three.js](https://threejs.org/): a war-torn forest, AI soldiers, drivable T-55 tanks, flyable A-10s and a B-2 bomber, four game modes and WebSocket multiplayer. Plain HTML/CSS/JS with ES modules, no build step.
 
 ## Features
 
@@ -8,7 +8,7 @@ A browser FPS built on [Three.js](https://threejs.org/): a war-torn forest, AI s
 - **Weapons:** AK-74, AWM (live scope), AR-15 (red dot), Desert Eagle, Glock 17. All have animated first-person hands and sights that stay exactly on centre while aiming.
 - **Vehicles:**
   - **T-55A tanks:** rotating turret aimed with the mouse, 125 mm cannon, run-over damage.
-  - **Jets:** mouse-aim flight, cannon and bombs.
+  - **A-10 Warthog:** mouse-aim flight, cannon and bombs.
   - **B-2 Spirit:** carpet bombing.
 - **AI:** three difficulty levels, team play and objectives.
 - **Customisation:** crosshair editor, career and XP, settings saved locally.
@@ -75,7 +75,8 @@ style.css         UI
 config.js         runtime config (multiplayer server URL)
 core.js           engine: renderer, terrain, collision, particles, audio, world, aircraft ambience
 game.js           gameplay: weapons, AI, modes, vehicles, HUD, multiplayer client
-*.glb             models (forest, weapons + arms, soldier, T-55A)
+*.glb             models (forest, weapons + arms, soldier, T-55A, A-10, B-2)
+vendor/three/     Three.js r158 (self-hosted, so the game also runs offline)
 server/           Cloudflare Worker relay (worker.js, wrangler.toml)
 viewer.html       dev tool: inspect a .glb and its animation (not deployed)
 ```

@@ -437,6 +437,11 @@ function buildBomber() {
   return g;
 }
 const jets = []; for (let i = 0; i < 3; i++) { const j = buildJet(1.4); j.userData.f = { phase: i * 0.14, r: 210 + i * 12, h: 105 + i * 7, spd: 0.3 }; scene.add(j); jets.push(j); }
+let bomberFactory = buildBomber;
+export function setAmbientAircraft(jetFactory, bomberF) {   // swap the procedural ambient jets / bomber for loaded models
+  if (jetFactory) for (let i = 0; i < jets.length; i++) { const old = jets[i], j = jetFactory(); j.userData.f = old.userData.f; if (!j.userData.exhaust) { const ex = new THREE.Object3D(); ex.position.z = -4; j.add(ex); j.userData.exhaust = ex; } scene.remove(old); scene.add(j); jets[i] = j; }
+  if (bomberF) bomberFactory = bomberF;
+}
 let bomber = null, bomberT = 12, jetSoundT = 5, artT = 6; const bombs = [], bombGeo = new THREE.CylinderGeometry(0.28, 0.2, 1.4, 8); bombGeo.rotateX(Math.PI / 2);
 export const world = { frame: 0, explode: null, active: () => true, playerPos: () => camera.position };
 export function updateWorld(dt, t) {
@@ -447,7 +452,7 @@ export function updateWorld(dt, t) {
   for (let i = 0; i < jets.length; i++) { const j = jets[i], f = j.userData.f, ang = t * f.spd + f.phase; j.position.set(Math.cos(ang) * f.r, f.h + Math.sin(t * 0.4 + i) * 5, Math.sin(ang) * f.r); _a.set(Math.cos(ang + 0.02) * f.r, f.h + Math.sin(t * 0.4 + 0.05 + i) * 5, Math.sin(ang + 0.02) * f.r); j.lookAt(_a); _b.set(1, 0, 0).applyQuaternion(j.quaternion); _c.copy(j.position).negate().normalize(); j.rotateZ(_b.dot(_c) > 0 ? -0.55 : 0.55); if ((world.frame + i) % 2 === 0) { j.userData.exhaust.getWorldPosition(_a); smoke.spawn(_a.x, _a.y, _a.z, rand(-0.5, 0.5), rand(-0.3, 0.3), rand(-0.5, 0.5), 4, 1.2, 6, 0.85, 0.85, 0.85, 0.35, 0.2, 0); } }
   jetSoundT -= dt; if (jetSoundT <= 0) { jetSoundT = rand(6, 12); const j = jets[randi(0, 2)]; sfx.jet(j.position.distanceTo(camera.position), panFor(j.position)); }
   bomberT -= dt;
-  if (!bomber && bomberT <= 0) { bomber = buildBomber(); const a = rand(0, 6.3); bomber.position.set(Math.cos(a) * 420, 150, Math.sin(a) * 420); const tgt = V3(rand(-120, 120), 150, rand(-120, 120)); bomber.userData.v = tgt.sub(bomber.position).normalize().multiplyScalar(42); bomber.lookAt(bomber.position.clone().add(bomber.userData.v)); bomber.userData.drops = 5; bomber.userData.dropT = 0; scene.add(bomber); }
+  if (!bomber && bomberT <= 0) { bomber = bomberFactory(); const a = rand(0, 6.3); bomber.position.set(Math.cos(a) * 420, 150, Math.sin(a) * 420); const tgt = V3(rand(-120, 120), 150, rand(-120, 120)); bomber.userData.v = tgt.sub(bomber.position).normalize().multiplyScalar(42); bomber.lookAt(bomber.position.clone().add(bomber.userData.v)); bomber.userData.drops = 5; bomber.userData.dropT = 0; scene.add(bomber); }
   if (bomber) { bomber.position.addScaledVector(bomber.userData.v, dt); const b = bomber.userData; if (Math.abs(bomber.position.x) < 170 && Math.abs(bomber.position.z) < 170 && b.drops > 0) { b.dropT -= dt; if (b.dropT <= 0) { b.dropT = 0.7; b.drops--; const m = new THREE.Mesh(bombGeo, mats.steel); m.position.copy(bomber.position).y -= 1.5; m.userData.v = b.v.clone().multiplyScalar(0.7); m.quaternion.copy(bomber.quaternion); scene.add(m); bombs.push(m); if (b.drops === 4) sfx.whistle(4); } } if (bomber.position.length() > 480) { scene.remove(bomber); bomber = null; bomberT = rand(25, 45); } }
   for (const b of bombs.slice()) { b.userData.v.y -= 20 * dt; b.position.addScaledVector(b.userData.v, dt); b.lookAt(b.position.clone().add(b.userData.v)); if (b.position.y <= getH(b.position.x, b.position.z)) { b.position.y = getH(b.position.x, b.position.z); world.explode && world.explode(b.position, true); scene.remove(b); bombs.splice(bombs.indexOf(b), 1); } }
   artT -= dt; if (artT <= 0) { artT = rand(7, 16); const pp = world.playerPos(), a = rand(0, 6.3), r = rand(40, 140), p = V3(clamp(pp.x + Math.cos(a) * r, -MAP, MAP), 0, clamp(pp.z + Math.sin(a) * r, -MAP, MAP)); p.y = getH(p.x, p.z); sfx.whistle(1.4); setTimeout(() => { if (world.active()) world.explode && world.explode(p, false); }, 1400); }

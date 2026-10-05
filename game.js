@@ -1,6 +1,7 @@
 /* game.js — gameplay: player, soldiers/bots, weapons (animated rigs), game modes, HUD/lobby, multiplayer client. */
-import { THREE, MAP, rand, randi, clamp, lerp, smooth, $, V3, _a, _b, _c, lerpAngle, settings, career, saveSettings, saveCareer, sfx, renderer, scene, camera, getH, addObs, obsBox, freeSpot, resolveCollision, losClear, rayTerrain, rayTrees, sparks, puffSmoke, burst, tracer, explodeFx, fx, panFor, loadModel, setupTextures, partsFromScene, forestPatch, buildStructures, buildForest, forestClear, solids, mapImg, tanks, world, updateWorld, flashTex, softTex, expLights, buildJet, STEP, obstacles, seedWorld, unseedWorld } from './core.js';
+import { THREE, MAP, rand, randi, clamp, lerp, smooth, $, V3, _a, _b, _c, lerpAngle, settings, career, saveSettings, saveCareer, sfx, renderer, scene, camera, getH, addObs, obsBox, freeSpot, resolveCollision, losClear, rayTerrain, rayTrees, sparks, puffSmoke, burst, tracer, explodeFx, fx, panFor, loadModel, setupTextures, partsFromScene, forestPatch, buildStructures, buildForest, forestClear, solids, mapImg, tanks, world, updateWorld, flashTex, softTex, expLights, buildJet, STEP, obstacles, seedWorld, unseedWorld, setAmbientAircraft } from './core.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // =====================================================================
 // CONFIG
@@ -770,6 +771,42 @@ function updateVehicles(dt) {
 function tankNet(v) { const r = x => +x.toFixed(3); return [r(v.pos.x), r(v.pos.y), r(v.pos.z), r(v.quat.x), r(v.quat.y), r(v.quat.z), r(v.quat.w), r(v.tYaw), r(v.elev)]; }
 function smokeTrail(p) { if (Math.random() < 0.6) puffSmoke(p, 1, 0.4, 1.4, 0.55, [0.4, 0.8], 0.2, 0.2, 0.35); }
 
+
+// =====================================================================
+// AIRCRAFT MODELS — merge each model into one mesh per material, centre it, nose → +Z, scale to a wingspan
+// =====================================================================
+const aircraft = {};
+async function bakeAircraft(gltf, { noseNegZ = false } = {}) {
+  const root = gltf.scene, parser = gltf.parser; root.updateMatrixWorld(true);
+  // r158 dropped KHR_materials_pbrSpecularGlossiness: rebuild those materials from their diffuse colour / texture
+  const fixed = new Map();
+  const fixMat = async (mat, mesh) => {
+    if (fixed.has(mat)) return fixed.get(mat);
+    let out = mat; const assoc = parser && parser.associations.get(mat), def = assoc && assoc.materials !== undefined ? parser.json.materials[assoc.materials] : null, sg = def && def.extensions && def.extensions.KHR_materials_pbrSpecularGlossiness;
+    if (sg) { out = new THREE.MeshStandardMaterial({ name: mat.name, roughness: 0.62, metalness: 0.25, side: mat.side });
+      if (sg.diffuseFactor) out.color.setRGB(sg.diffuseFactor[0], sg.diffuseFactor[1], sg.diffuseFactor[2], THREE.LinearSRGBColorSpace);
+      if (sg.diffuseTexture) { const tex = await parser.getDependency('texture', sg.diffuseTexture.index); tex.colorSpace = THREE.SRGBColorSpace; out.map = tex; }
+      if (def.alphaMode === 'MASK' || def.alphaMode === 'BLEND') { out.alphaTest = 0.5; } }
+    else if (mat.transparent) { out = mat.clone(); out.transparent = false; out.alphaTest = 0.3; }   // glass etc. drawn opaque-ish (no sorting issues on the merged mesh)
+    out.envMapIntensity = 0.8; fixed.set(mat, out); return out;
+  };
+  const groups = new Map(), box = new THREE.Box3();
+  const meshes = []; root.traverse(o => { if (o.isMesh && o.visible) meshes.push(o); });
+  for (const m of meshes) {
+    let geo = m.geometry.clone().applyMatrix4(m.matrixWorld); geo = geo.index ? geo.toNonIndexed() : geo;
+    for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(k)) geo.deleteAttribute(k);
+    if (!geo.attributes.normal) geo.computeVertexNormals(); if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    geo.morphAttributes = {}; geo.clearGroups();
+    const src = Array.isArray(m.material) ? m.material[0] : m.material;
+    const mat = await fixMat(src, m);
+    let arr = groups.get(mat); if (!arr) groups.set(mat, arr = []); arr.push(geo); geo.computeBoundingBox(); box.union(geo.boundingBox);
+  }
+  const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()), tpl = new THREE.Group();
+  for (const [mat, list] of groups) { const merged = mergeGeometries(list, false); if (!merged) continue; merged.translate(-c.x, -c.y, -c.z); if (noseNegZ) merged.rotateY(Math.PI); const mesh = new THREE.Mesh(merged, mat); mesh.castShadow = mesh.receiveShadow = true; tpl.add(mesh); }
+  const span = size.x, minY = box.min.y - c.y;   // wingspan along X in both models
+  return (wingspan) => { const g = tpl.clone(), s = wingspan / span; g.scale.setScalar(s); const ex = new THREE.Object3D(); ex.position.set(0, 0, -size.z * 0.5); g.add(ex); g.userData.exhaust = ex; g.userData.gear = -minY * s; return g; };
+}
+
 // =====================================================================
 // FLYABLE JETS — team bases in multiplayer and in the solo team modes
 // =====================================================================
@@ -792,8 +829,8 @@ function buildB2() {
   const ex = new THREE.Object3D(); ex.position.z = -4.6; g.add(ex); g.userData.exhaust = ex; g.scale.setScalar(0.8); return g;
 }
 const PLANE_KINDS = [
-  { kind: 0, name: 'JET', build: () => buildJet(1.0), maxSpd: 92, boost: 1.4, turn: 1.8, bank: 1.15, gun: true, bombCd: 3.5, hp: 220, lift: 28, stall: 24, landSpd: 48, colR: 2.5, cam: [16, 4.5], gear: 1.0 },
-  { kind: 1, name: 'B-2 SPIRIT', build: buildB2, maxSpd: 72, boost: 1.2, turn: 0.95, bank: 0.7, gun: false, stick: 12, stickDt: 0.14, bombCd: 9, hp: 600, lift: 26, stall: 20, landSpd: 44, colR: 9, cam: [34, 10], gear: 1.5 },
+  { kind: 0, name: 'A-10 WARTHOG', build: () => aircraft.a10 ? aircraft.a10(13) : buildJet(1.0), maxSpd: 92, boost: 1.4, turn: 1.8, bank: 1.15, gun: true, bombCd: 3.5, hp: 220, lift: 28, stall: 24, landSpd: 48, colR: 2.5, cam: [16, 4.5], gear: 1.0 },
+  { kind: 1, name: 'B-2 SPIRIT', build: () => aircraft.b2 ? aircraft.b2(30) : buildB2(), maxSpd: 72, boost: 1.2, turn: 0.95, bank: 0.7, gun: false, stick: 12, stickDt: 0.14, bombCd: 9, hp: 600, lift: 26, stall: 20, landSpd: 44, colR: 9, cam: [34, 10], gear: 1.5 },
 ];
 function setupPlanes() {
   for (const p of planes) scene.remove(p.g); planes.length = 0; pilot.plane = null;
@@ -938,13 +975,16 @@ world.active = () => state !== 'menu'; world.playerPos = () => player.pos;
 // ASSET LOADING → START
 // =====================================================================
 async function loadAssets() {
-  const note = $('assetnote'), bar = $('loadfill'), files = [['forest', 'forest.glb'], ['tank', 'tank_t-55a.glb'], ['soldier', 'soldier_character.glb'], ['ak', 'fps_ak_animated.glb'], ['pistol', 'animated_pistol.glb'], ['sniper', 'sniper_animated.glb'], ['ar', 'ar-15.glb'], ['glock', 'glock_gun_3d_model_free_download.glb']];
+  const note = $('assetnote'), bar = $('loadfill'), files = [['forest', 'forest.glb'], ['tank', 'tank_t-55a.glb'], ['soldier', 'soldier_character.glb'], ['ak', 'fps_ak_animated.glb'], ['pistol', 'animated_pistol.glb'], ['sniper', 'sniper_animated.glb'], ['ar', 'ar-15.glb'], ['glock', 'glock_gun_3d_model_free_download.glb'], ['a10', 'a-10_thunderbolt_ii.glb'], ['b2', 'b2_spirit.glb']];
   const prog = {}, upd = () => { let s = 0; for (const f of files) s += prog[f[0]] || 0; bar.style.width = (s / files.length * 100) + '%'; };
   const failed = [];
   await Promise.all(files.map(async ([key, url]) => { try { const g = await loadModel(url, e => { if (e.total) { prog[key] = e.loaded / e.total; upd(); } }); prog[key] = 1; upd(); setupTextures(g.scene); assets[key] = g; } catch (e) { console.warn('asset failed', url, e); failed.push(key); } }));
   if (assets.forest) { try { const p = forestPatch(partsFromScene(assets.forest.scene)); if (p.trunks.length) assets.forestPatch = p; } catch (e) { console.warn('forest split failed', e); } }
   if (assets.soldier) { try { soldierParts = buildSoldierParts(assets.soldier); } catch (e) { console.warn('soldier split failed', e); soldierParts = null; } }
   if (assets.ak) { let base = null; assets.ak.scene.traverse(o => { if (!base && o.isMesh && o.name.startsWith('base_ak74')) base = o; }); if (base) { botGun = new THREE.Group(); const m = new THREE.Mesh(base.geometry, base.material); m.scale.setScalar(0.0085); botGun.add(m); const mz = new THREE.Object3D(); mz.name = 'muzzle'; mz.position.set(0, 14.3 * 0.0085, 76 * 0.0085); botGun.add(mz); } }
+  try { if (assets.a10) { aircraft.a10 = await bakeAircraft(assets.a10, { noseNegZ: true }); PLANE_KINDS[0].gear = aircraft.a10(13).userData.gear + 0.05; PLANE_KINDS[0].colR = 3; }
+        if (assets.b2) { aircraft.b2 = await bakeAircraft(assets.b2); PLANE_KINDS[1].gear = Math.max(0.6, aircraft.b2(30).userData.gear + 0.05); }
+        setAmbientAircraft(aircraft.a10 ? () => aircraft.a10(16) : null, aircraft.b2 ? () => aircraft.b2(48) : null); } catch (e) { console.warn('aircraft bake failed', e); }
   seedWorld(4242); buildStructures(assets.tank); const forestMode = buildForest(assets.forestPatch || null);
   if (assets.tank) for (const t of tanks) if (!t.userData.wrecked && !t.userData.proc) { try { makeDrivable(t); } catch (e) { console.warn('tank split failed', e); } }
   unseedWorld();
@@ -954,4 +994,4 @@ async function loadAssets() {
   $('deploy').disabled = false; $('netdeploy').disabled = false; $('loadwrap').classList.add('done');
 }
 initLobby(); loop(); loadAssets();
-window.FPS = { vehicles, driver, useVehicle, planes, pilot, togglePlane, scene, camera, renderer, player, entities, settings, career, vms, weaponRoot, assets, net, WEAPONS, get state() { return state; }, get ammo() { return ammo; }, get wave() { return wave; }, get mode() { return mode; }, get teamScore() { return teamScore; }, flags, DOM_POINTS, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, press: (b, v) => { if (b === 0) mouseDown = v; else ads = v; }, traceShot, cur, Bot, spawnBots, endMatch, resetGame, play };
+window.FPS = { aircraft, PLANE_KINDS, vehicles, driver, useVehicle, planes, pilot, togglePlane, scene, camera, renderer, player, entities, settings, career, vms, weaponRoot, assets, net, WEAPONS, get state() { return state; }, get ammo() { return ammo; }, get wave() { return wave; }, get mode() { return mode; }, get teamScore() { return teamScore; }, flags, DOM_POINTS, step: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) tick(dt); }, press: (b, v) => { if (b === 0) mouseDown = v; else ads = v; }, traceShot, cur, Bot, spawnBots, endMatch, resetGame, play };
